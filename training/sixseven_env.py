@@ -1,7 +1,13 @@
 import gymnasium as gym
 from gymnasium import spaces
 import numpy as np
-from game_final import Game
+
+from game import Game
+
+import sys # temp debug
+
+LOWER_BOUND = -500
+UPPER_BOUND = 500
 
 class SixSevenEnv(gym.Env):
     """
@@ -35,7 +41,7 @@ class SixSevenEnv(gym.Env):
         # We'll encode: empty="", digits 0-9, operators +/-/* as unique integer values
         # Empty: 0, Digits 0-9: 1-10, Operators +: 11, -: 12, *: 13
         self.observation_space = spaces.Box(
-            low=0, high=13, shape=(num_rows * num_cols,), dtype=np.int32
+            low=LOWER_BOUND, high=UPPER_BOUND, shape=(num_rows * num_cols * 2,), dtype=np.int32
         )
 
         self.action_map = {0: "up", 1: "down", 2: "left", 3: "right"}
@@ -43,27 +49,33 @@ class SixSevenEnv(gym.Env):
         self.max_steps = 500  # Maximum steps per episode
 
     def _encode_cell(self, cell_value):
-        """Convert cell value to integer encoding."""
-        if cell_value == "":
-            return 0
-        elif cell_value in "0123456789":
-            return int(cell_value) + 1  # 1-10
-        elif cell_value == "+":
-            return 11
-        elif cell_value == "-":
-            return 12
-        elif cell_value == "*":
-            return 13
-        else:
-            return 0  # Default for unknown values
+        """Stores 2 values: digit/[operator or empty]
+           What if cell_value = 0"""
+        try: 
+            return [int(cell_value) % 500, 0] # don't understand how still exceeds 500
+        except ValueError:
+            cell_value = str(cell_value)
+            if cell_value == "":
+                return [0, 1]
+            elif cell_value == "+":
+                return [0, 2]
+            elif cell_value == "-":
+                return [0, 3]
+            elif cell_value == "*":
+                return [0, 4]
 
-    def _get_observation(self):
+    def _get_observation(self, grid: list[list[str]] = None):
         """Convert game grid to observation array."""
-        obs = np.zeros(self.num_rows * self.num_cols, dtype=np.int32)
+        if grid is None:    # allows for conversion of arbitrary grid
+            grid = self.game._grid
+
+        obs = np.zeros(self.num_rows * self.num_cols * 2, dtype=np.int32)
+        flat_idx = 0
         for i in range(self.num_rows):
             for j in range(self.num_cols):
-                flat_idx = i * self.num_cols + j
-                obs[flat_idx] = self._encode_cell(self.game._grid[i][j])
+                obs[flat_idx:flat_idx + 2] = self._encode_cell(grid[i][j])
+                flat_idx += 2
+
         return obs
 
     def _get_info(self):
@@ -76,7 +88,6 @@ class SixSevenEnv(gym.Env):
     def reset(self, seed=None, options=None):
         """
         Reset the environment to initial state.
-
         Returns:
             observation: Initial observation
             info: Info dictionary
@@ -169,7 +180,7 @@ if __name__ == "__main__":
     print("Valid moves:", info["valid_moves"])
 
     # Run a few random steps
-    for _ in range(100):
+    for _ in range(10000):
         action = env.action_space.sample()
         obs, reward, terminated, truncated, info = env.step(action)
         print(f"Action: {env.action_map[action]}, Reward: {reward}, Valid moves: {info['valid_moves']}")
