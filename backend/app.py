@@ -1,5 +1,5 @@
 from flask import Flask, jsonify, render_template, request
-from game_manager import GameManager
+from backend.game_manager import GameManager
 
 app = Flask(__name__)
 
