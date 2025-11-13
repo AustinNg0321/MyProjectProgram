@@ -1,8 +1,8 @@
 import uuid
 from datetime import datetime, timedelta
-from models.user import User
-from app import db
-from utils.game_manager import GameManager
+from backend.models.user import User
+from backend.app import db
+from backend.utils.game_manager import GameManager
 
 def generate_user_id() -> str:
     return str(uuid.uuid4())

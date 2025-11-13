@@ -20,7 +20,7 @@ app.config["SQLALCHEMY_DATABASE_URI"] = "sqlite:///info.db"
 app.config["SQLALCHEMY_TRACK_MODIFICATIONS"] = False
 db = SQLAlchemy(app) 
 
-import routes.solo
+import backend.routes.solo
 
 if __name__ == '__main__':
     app.run(host='0.0.0.0', port=5000)

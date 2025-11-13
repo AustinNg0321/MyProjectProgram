@@ -1,9 +1,9 @@
 from flask import session, render_template, request, abort
 from random import random
-from app import db, app
-from models.user import User
-from utils.util import generate_user_id, cleanup_expired_sessions, dict_to_game
-from utils.game_manager import GameManager
+from backend.app import db, app
+from backend.models.user import User
+from backend.utils.util import generate_user_id, cleanup_expired_sessions, dict_to_game
+from backend.utils.game_manager import GameManager
 
 
 # session is permanent unless it expires, the user deletes cookie manually, or the server restarts 
