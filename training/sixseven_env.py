@@ -147,8 +147,11 @@ class SixSevenEnv(gym.Env):
         terminated = False
         truncated = False
 
+        info = {"win": 0}
+
         if self.game.is_won():
             reward = 10.0  # Win bonus
+            info["win"] = 1
             terminated = True
         elif self.game.is_lost():
             # Early end, heavy penalty for shorter games
