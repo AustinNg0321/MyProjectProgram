@@ -147,7 +147,7 @@ class SixSevenEnv(gym.Env):
         terminated = False
         truncated = False
 
-        info = {"win": 0}
+        info["win"] = 0
 
         if self.game.is_won():
             reward = 10.0  # Win bonus
