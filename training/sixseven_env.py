@@ -4,9 +4,9 @@ import numpy as np
 
 from game import ADDITION, MULTIPLICATION, SPACE, SUBTRACTION, Game
 
-# scaled down by 100
-LOWER_BOUND = -10
-UPPER_BOUND = 10
+# scaled down by 1000
+LOWER_BOUND = -1
+UPPER_BOUND = 1
 
 class SixSevenEnv(gym.Env):
     """
@@ -47,6 +47,8 @@ class SixSevenEnv(gym.Env):
         self.steps = 0
         self.max_steps = 1000  # Maximum steps per episode
 
+        self.current_min_dist = 1000.0
+
     def _encode_cell(self, cell_value: int) -> list[float]:
         """Stores 5 values: cell value if number, else one-hot for +,-,* or space"""
         if cell_value == SPACE:
@@ -58,21 +60,20 @@ class SixSevenEnv(gym.Env):
         elif cell_value == MULTIPLICATION:
             return [0, 0, 0, 0, 1]
         else:  # digit 0-9
-            return [cell_value / 100, 0, 0, 0, 0]
+            return [cell_value / 1000, 0, 0, 0, 0]
 
     def _get_observation(self, grid: list[list[str]] = None) -> np.ndarray:
         """Convert game grid to observation array."""
         if grid is None:    # allows for conversion of arbitrary grid
             grid = self.game._grid
 
-        obs = np.zeros(self.num_rows * self.num_cols * 5, dtype=np.float32)
-        flat_idx = 0
-        for i in range(self.num_rows):
-            for j in range(self.num_cols):
-                obs[flat_idx:flat_idx + 5] = self._encode_cell(grid[i][j])
-                flat_idx += 5
+        # Flatten and encode in one pass using list comprehension
+        encoded = [encoded_val
+                   for row in grid
+                   for cell in row
+                   for encoded_val in self._encode_cell(cell)]
 
-        return obs
+        return np.array(encoded, dtype=np.float32)
 
     def _get_info(self):
         """Get info dictionary."""
@@ -89,82 +90,93 @@ class SixSevenEnv(gym.Env):
             info: Info dictionary
         """
         super().reset(seed=seed)
-
         self.game = Game(self.num_rows, self.num_cols)
         self.game.generate_tiles()
         self.steps = 0
+        
+        # OPTIMIZATION: Initialize the cache
+        self.current_min_dist = self._calculate_min_distance()
 
         observation = self._get_observation()
         info = self._get_info()
         info["win"] = 0
-
         return observation, info
 
+    def _calculate_min_distance(self) -> float:
+        """
+        Optimized scanner:
+        1. Flattens grid using list comprehension (faster than nested for-loops).
+        2. Uses integer comparison (<= 1000) to filter out Operators/Spaces instantly.
+        """
+        # Extract only valid numbers (ignore operators 1001+ and SPACE 1004)
+        numbers = [
+            cell for row in self.game._grid 
+            for cell in row 
+            if cell <= 1000
+        ]
+        
+        if not numbers:
+            return 1000.0 # Default penalty if board is empty (rare)
+            
+        # Find min distance to 67
+        return min(abs(n - 67) for n in numbers)
+
     def step(self, action):
-        """
-        Execute one step of the environment.
-
-        Args:
-            action: Action to take (0=up, 1=down, 2=left, 3=right)
-
-        Returns:
-            observation: New observation
-            reward: Reward for this step
-            terminated: Whether the episode ended (win/loss)
-            truncated: Whether the episode was truncated (max steps)
-            info: Info dictionary
-        """
         self.steps += 1
-
+        
+        # 1. Use Cached State (No calculation needed here!)
+        prev_dist = self.current_min_dist
+        
         valid_moves = self.game.get_valid_moves()
         move_name = self.action_map[action]
 
         reward = 0.0
-
-
+        
         if move_name not in valid_moves:
-            reward = -1.0 # invalid move penalty
+            reward = -5.0 
+            # Optional: Terminate on invalid move to speed up training significantly
+            # return self._get_observation(), reward, True, False, self._get_info()
         else:
-            reward = -0.01 # small step penalty to encourage faster wins
+            # Execute move
+            if move_name == "up": self.game.slide_up()
+            elif move_name == "down": self.game.slide_down()
+            elif move_name == "left": self.game.slide_left()
+            else: self.game.slide_right()
 
-            # Execute the move
-            if move_name == "up":
-                self.game.slide_up()
-            elif move_name == "down":
-                self.game.slide_down()
-            elif move_name == "left":
-                self.game.slide_left()
-            else:  # right
-                self.game.slide_right()
-
-            # Generate new tiles after move
             self.game.generate_tiles()
+            
+            # 2. Calculate New State ONCE
+            curr_dist = self._calculate_min_distance()
+            
+            # Update Cache for the next step
+            self.current_min_dist = curr_dist
 
-        # Get new observation
-        observation = self._get_observation()
+            # Shaping Reward: Positive if we got closer, negative if further
+            # Scale by 0.1 (e.g., 10 units closer = +1.0 reward)
+            reward += (prev_dist - curr_dist) * 0.1
+
+            # Living Reward (Encourage keeping empty spaces)
+            # Use cached blank_spaces count instead of counting cells
+            empty_spaces = len(self.game._blank_spaces)
+            reward += empty_spaces * 0.01
+
+        # 3. Check Terminal States
+        terminated = False
+        truncated = False
         info = self._get_info()
         info["win"] = 0
 
-        # Check terminal conditions
-        terminated = False
-        truncated = False
-
         if self.game.is_won():
-            reward = 10.0  # Win bonus
+            reward += 100.0
             info["win"] = 1
             terminated = True
-        elif self.game.is_lost():
-            # Early end, heavy penalty for shorter games
-            # max 1000 steps
-            reward += -20.0 + self.steps * 0.01
-
+        elif self.game.is_lost(valid_moves):
+            reward -= 50.0
             terminated = True
-
-        if self.steps >= self.max_steps:
-            reward += -10.0  # Penalty for exceeding max steps
+        elif self.steps >= self.max_steps:
             truncated = True
 
-        return observation, reward, terminated, truncated, info
+        return self._get_observation(), reward, terminated, truncated, info
 
     def render(self):
         """Render the current game state."""
@@ -176,20 +188,39 @@ class SixSevenEnv(gym.Env):
 
 
 if __name__ == "__main__":
+    import time
+    env = SixSevenEnv()
+
+    obs = env.reset()
+    start = time.time()
+    for i in range(5000):
+        obs, r, done, truncated, info = env.step(env.action_space.sample())
+        if done:
+            obs = env.reset()
+
+    print("5000 steps took:", time.time() - start, "seconds")
+
+    exit()
     # Test the environment
     env = SixSevenEnv()
     obs, info = env.reset()
     print("Initial observation shape:", obs.shape)
-    print("Initial observation:", obs)
     print("Valid moves:", info["valid_moves"])
 
-    # Run a few random steps
-    for _ in range(10000):
+    total_reward = 0.0
+
+    # Run a few random steps - don't render during training loops for performance
+    for step_num in range(10000):
         action = env.action_space.sample()
         obs, reward, terminated, truncated, info = env.step(action)
-        print(f"Action: {env.action_map[action]}, Reward: {reward}, Valid moves: {info['valid_moves']}")
-        print(env.render())
+
+        total_reward += reward
+
+        # Only print every 1000 steps or on episode end to avoid slowdown
+        print(f"Step {step_num}: Action: {env.action_map[action]}, Reward: {reward:.2f}")
 
         if terminated or truncated:
-            print("Episode ended")
+            print(f"Episode ended at step {step_num}")
             break
+
+    print("Total reward: ", reward)

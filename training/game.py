@@ -138,8 +138,11 @@ class Game:
         num_blank_spaces = len(self._blank_spaces)
         num_tiles_to_generate = min(num_blank_spaces, self._num_generated_tiles)
 
-        for i in range (num_tiles_to_generate):
-            cur_index = random.randint(0, num_blank_spaces - 1)
+        # Select random indices without replacement and remove in reverse order
+        # to avoid O(n) cost of pop() multiple times
+        selected_indices = random.sample(range(num_blank_spaces), num_tiles_to_generate)
+
+        for cur_index in selected_indices:
             cur_pos = self._blank_spaces[cur_index]
 
             if random.random() <= self._prob_operations:
@@ -147,8 +150,9 @@ class Game:
             else:
                 self._grid[cur_pos[0]][cur_pos[1]] = random.choice(self._generated_digits)
 
-            num_blank_spaces -= 1
-            self._blank_spaces.pop(cur_index)
+        # Remove selected indices in reverse order to avoid index shifting issues
+        for idx in sorted(selected_indices, reverse=True):
+            self._blank_spaces.pop(idx)
 
     def left(self) -> list[list[int]]:
         new_grid = []
@@ -231,17 +235,22 @@ class Game:
     def is_won(self) -> bool:
         return any(self._grid[i][j] == 67 for i in range(self._num_rows) for j in range(self._num_cols))
 
-    def is_lost(self) -> bool:
-        return not self.is_won() and (len(self.get_valid_moves()) == 0 or out_of_bounds(self._grid))
+    def is_lost(self, valid_moves: list[str] = None) -> bool:
+        """Check if game is lost. Optionally pass valid_moves to avoid recalculation."""
+        if valid_moves is None:
+            valid_moves = self.get_valid_moves()
+        return not self.is_won() and (len(valid_moves) == 0 or out_of_bounds(self._grid))
 
 def human_play(num_rows: int, num_cols: int) -> bool:
     game = Game(num_rows, num_cols)
     round_num = 1
+        
+    valid_moves = game.get_valid_moves()
+    game.generate_tiles()
+    print(game)
 
     while True:
-        game.generate_tiles()
         valid_moves = game.get_valid_moves()
-        print(game)
 
         if len(valid_moves) == 0:
             print(f"Game over after {round_num} rounds.")
@@ -259,6 +268,7 @@ def human_play(num_rows: int, num_cols: int) -> bool:
                     game.slide_left()
                 else:
                     game.slide_right()
+                game.generate_tiles()
                 print(game)
                 finished_move = True
             else:
