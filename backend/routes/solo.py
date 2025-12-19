@@ -5,8 +5,6 @@ from backend.models.user import User
 from backend.utils.util import generate_user_id, cleanup_expired_sessions, dict_to_game
 from backend.utils.game_manager import GameManager
 
-# check for missing session keys in the future 
-
 # session is permanent unless it expires, the user deletes cookie manually, or the server restarts 
 @app.before_request
 def ensure_session():
@@ -20,7 +18,7 @@ def ensure_session():
     if random() < 0.001:
         cleanup_expired_sessions()
 
-@app.route("/", methods=["GET"])
+@app.route("/api/", methods=["GET"])
 def index():
     user_id = session["user_id"]
     user = User.query.get_or_404(user_id)
@@ -33,11 +31,11 @@ def index():
     return jsonify(user_profile)
 
 # Solo mode
-@app.route("/solo", methods=["GET"])
+@app.route("/api/solo", methods=["GET"])
 def get_solo():
     return jsonify(session["current_solo_game"])
 
-@app.route("/restart", methods=["POST"])
+@app.route("/api/restart", methods=["POST"])
 def restart():
     game = dict_to_game(session["current_solo_game"])
     if game.get_state() == "In Progress":
@@ -50,7 +48,7 @@ def restart():
     session["current_solo_game"] = game.to_dict()
     return jsonify(session["current_solo_game"])
 
-@app.route("/move", methods=["POST"])
+@app.route("/api/move", methods=["POST"])
 def make_move():
     # Expects "up", "down", "left", or "right" in the request body
     direction = request.data.decode("utf-8").strip().lower()
