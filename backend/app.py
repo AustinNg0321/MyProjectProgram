@@ -16,8 +16,9 @@ CORS(
     origins=["http://localhost:3000"]
 )
 
-app.config["SESSION_COOKIE_SAMESITE"] = "Lax";
-app.config["SESSION_COOKIE_SECURE"] = False;  # True in production (HTTPS)
+app.config["SESSION_COOKIE_HTTPONLY"] = True
+app.config["SESSION_COOKIE_SAMESITE"] = "Lax"
+app.config["SESSION_COOKIE_SECURE"] = False  # True in production (HTTPS)
 
 # Use client-side Flask sessions for non-sensitive data
 # A session should store data for id, current game, and statistics (wins/losses/abandoned games, and maybe time/moves taken)
@@ -64,4 +65,4 @@ db = SQLAlchemy(app)
 import backend.routes.solo
 
 if __name__ == '__main__':
-    app.run(host='0.0.0.0', port=5000)
+    app.run(host="localhost", port=5000)

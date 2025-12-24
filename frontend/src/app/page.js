@@ -1,16 +1,7 @@
+"use client";
+
+import { useEffect, useState } from "react";
 import GameModes from "./links";
-
-async function getStats() {
-    const res = await fetch("http://localhost:5000/api/", {
-        credentials: "include"
-    })
-    
-    if (!res.ok) {
-        throw new Error("Failed to fetch stats");
-    }
-
-    return res.json();
-}
 
 function Statistics({ data }) {
     return (
@@ -25,8 +16,21 @@ function Statistics({ data }) {
     )
 }
 
-export default async function Home() {
-    const info = await getStats();
+export default function Home() {
+    const [info, setInfo] = useState(null);
+
+    useEffect(() => {
+      fetch("/api/", {
+        credentials: "include",
+      })
+        .then((res) => res.json())
+        .then((data) => setInfo(data))
+        .catch((err) => console.error(err));
+    }, []);
+
+    if (!info) {
+        return <p>Loading ...</p>;
+    }
 
     return (
         <>
